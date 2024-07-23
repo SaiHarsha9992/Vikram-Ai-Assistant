@@ -1,0 +1,29 @@
+.SlideChat {
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+  padding: 10px;
+  bottom: 8px;
+  background-color: black;
+  border-radius: 15px;
+  border: 3px solid gold;
+}
+
+.answer {
+  color: gold;
+  position: relative;
+  bottom: 40px;
+  left: 50px;
+  width: 350px;
+}
+
+.send {
+  background-color: red;
+  border: 3px solid gold;
+  text-decoration-color: white;
+  padding: 5;
+  color: gold;
+  padding-left: 5;
+  border-radius: 10px;
+  font-size: 18px;
+}

@@ -1,0 +1,90 @@
+/* Registration.css */
+body,
+html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-image: url("../public/videos/untitled.jpg"); /* Black background */
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100vw;
+  /* Black background */
+}
+
+h2 {
+  color: #fff; /* White text */
+  font-size: 2em;
+  margin-bottom: 20px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 500px;
+  background: #333; /* Dark gray background */
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+}
+
+label {
+  margin-top: 10px;
+  font-size: 1.1em;
+  color: #fff; /* White text */
+}
+
+input[type="text"],
+input[type="file"] {
+  margin-top: 5px;
+  padding: 5px;
+  width: 100%;
+  border: 1px solid #555; /* Dark gray border */
+  border-radius: 5px;
+  box-sizing: border-box;
+  background-color: #444; /* Dark gray input background */
+  color: #fff; /* White text */
+}
+
+button {
+  margin-top: 20px;
+  padding: 10px 10px;
+  font-size: 1em;
+  color: #fff; /* White text */
+  background-color: #d32f2f; /* Red background */
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #9a0007; /* Darker red background on hover */
+}
+
+.preview {
+  margin-top: 20px;
+}
+
+.preview img {
+  width: 200px;
+  border-radius: 10px;
+}
+
+.registration-success {
+  text-align: center;
+  color: #fff; /* White text */
+}
