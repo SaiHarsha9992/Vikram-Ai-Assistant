@@ -1,7 +1,10 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Webcam from "react-webcam";
+import { s3, rekognition } from "./aws-config";
 import "./Registration.css";
+
+// Configure AWS SDK
 
 const Registration = () => {
   const [name, setName] = useState("");
@@ -33,36 +36,49 @@ const Registration = () => {
 
     if (name && capturedImage) {
       try {
-        const formData = new FormData();
-        formData.append("name", name); // Include user's name in the FormData
-
-        // Convert image data URL to a Blob
+        // Convert data URL to Blob
         const response = await fetch(capturedImage);
         const blob = await response.blob();
-        formData.append("image", blob, "captured-image.jpg");
+        const fileName = `${name}.jpg`;
 
-        const res = await fetch("http://localhost:5500/upload", {
-          method: "POST",
-          body: formData,
-        });
+        // Upload to S3
+        const params = {
+          Bucket: "vikramai",
+          Key: fileName,
+          Body: blob,
+          ContentType: "image/jpeg",
+        };
 
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(
-            errorData.message || "Failed to register. Please try again."
-          );
-        }
+        await s3.upload(params).promise();
 
-        const result = await res.json();
+        // Index Face in Rekognition
+        const indexParams = {
+          CollectionId: "vikramaiass",
+          Image: {
+            S3Object: {
+              Bucket: "vikramai",
+              Name: fileName,
+            },
+          },
+          ExternalImageId: name,
+        };
+
+        await rekognition.indexFaces(indexParams).promise();
+
+        console.log("New face registered successfully.");
+        alert("Registration successful!");
+
         setRegistrationSuccess(true);
-        alert(result.message);
+        setName("");
+        setCapturedImage(null);
+        setIsCapturing(false);
 
         setTimeout(() => {
           navigate("/"); // Redirect to the home page
         }, 2000); // 2-second delay to allow the user to see the success message
       } catch (error) {
-        console.error("Error during registration:", error);
-        alert(error.message || "Failed to register. Please try again.");
+        console.error("Error registering new face:", error);
+        alert("Failed to register. Please try again.");
       }
     } else {
       alert("Please enter your name and capture your image.");

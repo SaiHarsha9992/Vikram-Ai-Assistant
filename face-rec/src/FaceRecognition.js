@@ -1,133 +1,56 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Webcam from "react-webcam";
+import { s3, rekognition } from "./aws-config"; // Ensure aws-config.js has your AWS setup
 import * as faceapi from "face-api.js";
-import images from "./ImportImages"; // Import images
 
 const FaceRecognition = () => {
-  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const webcamRef = useRef(null);
   const [capturedImage, setCapturedImage] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
   const [matchedImageName, setMatchedImageName] = useState("");
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [image, setImage] = useState("Harsha");
-  const webcamRef = React.useRef(null);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    const loadModels = async () => {
-      try {
-        const MODEL_URL = "/models";
-        console.log("Loading models...");
-        await faceapi.loadTinyFaceDetectorModel(MODEL_URL);
-        await faceapi.loadFaceLandmarkModel(MODEL_URL);
-        await faceapi.loadFaceRecognitionModel(MODEL_URL);
-        console.log("Models loaded successfully.");
-        setModelsLoaded(true);
-      } catch (error) {
-        console.error("Error loading models:", error);
-      }
-    };
-    loadModels();
-  }, []);
-
-  const handleCapture = useCallback(() => {
+  const capture = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();
     setCapturedImage(imageSrc);
     setComparisonResult(null);
     console.log("Captured image:", imageSrc);
   }, [webcamRef]);
 
-  const compareFaces = async () => {
-    setLoading(true);
+  const handleRekognitionSearch = async (fileName) => {
+    const params = {
+      CollectionId: "vikramaiass",
+      Image: {
+        S3Object: {
+          Bucket: "vikramai",
+          Name: fileName,
+        },
+      },
+    };
+
     try {
-      if (!capturedImage) {
-        console.error("No image captured.");
+      const result = await rekognition.searchFacesByImage(params).promise();
+      if (result.FaceMatches.length > 0) {
+        const userName = result.FaceMatches[0].Face.ExternalImageId;
+        setMatchedImageName(userName);
+        setComparisonResult(true);
+        await sendUserNameToBackend(userName); // Send the identified user name to the backend
+        console.log(userName);
+      } else {
         setComparisonResult(false);
-        setLoading(false);
-        return;
       }
-
-      console.log("Converting base64 to blob...");
-      const imgBlob1 = base64ToBlob(capturedImage);
-      const img1 = await faceapi.bufferToImage(imgBlob1);
-
-      console.log("Detecting face in the captured image...");
-      const detections1 = await faceapi
-        .detectSingleFace(img1, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (!detections1) {
-        console.error("No face detected in the captured image.");
-        setComparisonResult(false);
-        setLoading(false);
-        return;
-      }
-
-      console.log("Face detected in the captured image.");
-
-      const existingImages = Object.keys(images).map((filename) => ({
-        path: images[filename],
-        name: filename.split(".")[0], // Extract name from filename
-      }));
-      console.log(existingImages);
-      for (const img of existingImages) {
-        if (!img.path) {
-          console.error(`Image path is undefined for ${img.name}`);
-          continue;
-        }
-
-        try {
-          console.log(`Fetching image: ${img.path}`);
-          const response = await fetch(img.path);
-          if (!response.ok) {
-            console.error(`Failed to fetch image: ${img.path}`);
-            continue;
-          }
-
-          const imgBlob2 = await response.blob();
-          const img2 = await faceapi.bufferToImage(imgBlob2);
-          console.log(`Detecting face in the image: ${img.path}`);
-          const detections2 = await faceapi
-            .detectSingleFace(img2, new faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-
-          if (detections2) {
-            console.log(`Face detected in the image: ${img.path}`);
-            const distance = faceapi.euclideanDistance(
-              detections1.descriptor,
-              detections2.descriptor
-            );
-            console.log(`Distance between faces: ${distance}`);
-            if (distance < 0.6) {
-              console.log(`Match found: ${img.name}`);
-              setImage(img.name);
-              setMatchedImageName(img.name);
-              setComparisonResult(true);
-              setLoading(false);
-              return;
-            }
-          } else {
-            console.error(`No face detected in the image: ${img.path}`);
-            setImage("Harsha");
-          }
-        } catch (imgError) {
-          console.error(`Error processing image ${img.path}:`, imgError);
-          setImage("Harsha");
-        }
-      }
-      console.log("No match found.");
-      setComparisonResult(false);
     } catch (error) {
-      console.error("Error comparing faces:", error);
+      console.error("Error searching face:", error);
       setComparisonResult(false);
     } finally {
       setLoading(false);
     }
   };
-  const sendUsername = async (name) => {
+
+  const sendUserNameToBackend = async (name) => {
     setLoading(true);
     try {
       const response = await fetch("http://localhost:5000/user", {
@@ -147,26 +70,68 @@ const FaceRecognition = () => {
   };
 
   useEffect(() => {
-    if (modelsLoaded && capturedImage) {
-      compareFaces();
-    }
-  }, [modelsLoaded, capturedImage]);
+    const uploadAndSearch = async () => {
+      if (capturedImage) {
+        setLoading(true);
+        const blob = await fetch(capturedImage).then((res) => res.blob());
+        const fileName = `${Date.now()}.jpg`;
+
+        const params = {
+          Bucket: "vikramai",
+          Key: fileName,
+          Body: blob,
+          ContentType: "image/jpeg",
+        };
+
+        try {
+          await s3.upload(params).promise();
+          await handleRekognitionSearch(fileName);
+        } catch (error) {
+          console.error("Error uploading image:", error);
+          setComparisonResult(false);
+        }
+      }
+    };
+
+    uploadAndSearch();
+  }, [capturedImage]);
 
   useEffect(() => {
     if (comparisonResult === true) {
       console.log("Redirecting to the homepage...");
-      sendUsername(matchedImageName);
       window.location.href = "http://localhost:5173";
     } else if (comparisonResult === false) {
       console.log("Redirecting to the registration page...");
       navigate("/not-my-user");
     }
-  }, [comparisonResult, navigate, image, matchedImageName]);
+  }, [comparisonResult, navigate]);
 
-  const handleRegisterClick = () => {
-    navigate("/registration");
-  };
+  useEffect(() => {
+    const loadModels = async () => {
+      await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+    };
 
+    loadModels();
+
+    const interval = setInterval(async () => {
+      if (webcamRef.current) {
+        const video = webcamRef.current.video;
+        const detections = await faceapi.detectAllFaces(
+          video,
+          new faceapi.TinyFaceDetectorOptions()
+        );
+
+        if (detections.length > 0 && !faceDetected) {
+          setFaceDetected(true);
+          capture();
+        } else if (detections.length === 0 && faceDetected) {
+          setFaceDetected(false);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [capture, faceDetected]);
   return (
     <div>
       <video
@@ -176,7 +141,6 @@ const FaceRecognition = () => {
         loop
         style={{
           width: "100%",
-
           height: "100%",
           objectFit: "cover",
           position: "absolute",
@@ -201,7 +165,7 @@ const FaceRecognition = () => {
         }}
       />
       <button
-        onClick={handleCapture}
+        onClick={capture}
         style={{
           position: "absolute",
           top: "81%",
@@ -219,14 +183,14 @@ const FaceRecognition = () => {
         <>
           <div
             style={{
-              position: "absolute", // Change to absolute positioning for better control
+              position: "absolute",
               width: "450px",
-              height: "150px", // Adjust height to auto to maintain aspect ratio
+              height: "150px",
               backgroundColor: "black",
-              left: "38%", // Center horizontally
-              top: "32%", // Center vertically
-              transform: "translate(-50%, -50%)", // Adjust for centering
-              padding: "10px", // Add some padding around the image
+              left: "38%",
+              top: "32%",
+              transform: "translate(-50%, -50%)",
+              padding: "10px",
             }}
           >
             <h3 style={{ color: "white", textAlign: "center" }}>
@@ -240,7 +204,7 @@ const FaceRecognition = () => {
                 height: "200px",
                 display: "block",
                 margin: "0 auto",
-              }} // Adjust image size
+              }}
             />
           </div>
           <video
@@ -267,21 +231,11 @@ const FaceRecognition = () => {
         ) : (
           <div>
             <p>No Match Found</p>
-            <button onClick={handleRegisterClick}>Register</button>
+            <button onClick={() => navigate("/not-my-user")}>Register</button>
           </div>
         ))}
     </div>
   );
-};
-
-const base64ToBlob = (base64, contentType = "image/jpeg") => {
-  const byteCharacters = atob(base64.split(",")[1]); // Decode base64
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  return new Blob([byteArray], { type: contentType });
 };
 
 export default FaceRecognition;
